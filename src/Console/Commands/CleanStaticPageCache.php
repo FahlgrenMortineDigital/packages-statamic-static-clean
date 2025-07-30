@@ -41,7 +41,13 @@ class CleanStaticPageCache extends Command
         $cacher->getDomains()->each(function (string $domain) use (&$expected, $cacher) {
             $cacher->getUrls($domain)->each(function (string $url) use ($domain, $cacher, &$expected) {
                 $site = optional(Site::findByUrl($domain . $url))->handle();
-                $expected->push($cacher->getFilePath($domain . $url, $site));
+                $expected->push(
+                    preg_replace(
+                        '#/+/#',
+                        '/',
+                        $cacher->getFilePath($domain . $url, $site)
+                    )
+                );
             });
         });
 
