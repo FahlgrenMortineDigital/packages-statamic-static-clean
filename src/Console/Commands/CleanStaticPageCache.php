@@ -15,7 +15,9 @@ class CleanStaticPageCache extends Command
      *
      * @var string
      */
-    protected $signature = 'static-cache:clean {--dry-run : Show what would be deleted without actually deleting anything}';
+    protected $signature = 'static-cache:clean
+        {--D|dry-run : Show what would be deleted without actually deleting anything}
+        {--format= : Output format: text (default) or json}';
 
     /**
      * The console command description.
@@ -28,12 +30,18 @@ class CleanStaticPageCache extends Command
     {
         /** @var FileCacher $cacher */
         if (!$cacher instanceof FileCacher) {
-            $this->error('static-cache:clean only supports the static cache file driver.');
+            if ($this->option('format') === 'json') {
+                $this->line(json_encode(['status' => 'error', 'message' => 'static-cache:clean only supports the static cache file driver.']));
+            } else {
+                $this->error('static-cache:clean only supports the static cache file driver.');
+            }
             return self::FAILURE;
         }
 
         $dryRun = $this->option('dry-run');
+        $json = $this->option('format') === 'json';
         $deleted = 0;
+        $orphanedFiles = [];
 
         // 1. Build expected file paths from all Redis entries
         $expected = collect();
@@ -55,13 +63,13 @@ class CleanStaticPageCache extends Command
 
         // 2. Walk through cache directories and delete strays
         collect($cacher->getCachePaths())              // [siteHandle => '/public/static/site/']
-            ->each(function (string $dir) use (&$deleted, $expected, $dryRun) {
+            ->each(function (string $dir) use (&$deleted, &$orphanedFiles, $expected, $dryRun, $json) {
 
                 if (!File::isDirectory($dir)) {
                     return;
                 }
 
-                collect(File::allFiles($dir))->each(function (\SplFileInfo $file) use (&$deleted, $expected, $dryRun, $dir) {
+                collect(File::allFiles($dir))->each(function (\SplFileInfo $file) use (&$deleted, &$orphanedFiles, $expected, $dryRun, $json, $dir) {
 
                     // statamic static cache only writes .html files
                     if ($file->getExtension() !== 'html') {
@@ -72,8 +80,12 @@ class CleanStaticPageCache extends Command
                     $inRoot = $dir === dirname($fullPath, 1);
 
                     if (!$expected->has($fullPath)) {
+                        $orphanedFiles[] = $fullPath;
+
                         if ($dryRun) {
-                            $this->line("Would delete: {$fullPath}");
+                            if (!$json) {
+                                $this->line("Would delete: {$fullPath}");
+                            }
                         } else {
                             File::delete($fullPath);
                         }
@@ -92,10 +104,19 @@ class CleanStaticPageCache extends Command
                 });
             });
 
-        $msg = $dryRun
-            ? "Dry-run complete - {$deleted} orphaned files found."
-            : "Static prune complete - deleted {$deleted} orphaned files.";
-        $this->info($msg);
+        if ($json) {
+            $this->line(json_encode([
+                'status'    => 'success',
+                'dry_run'   => $dryRun,
+                'count'     => $deleted,
+                'files'     => $orphanedFiles,
+            ]));
+        } else {
+            $msg = $dryRun
+                ? "Dry-run complete - {$deleted} orphaned files found."
+                : "Static prune complete - deleted {$deleted} orphaned files.";
+            $this->info($msg);
+        }
 
         return self::SUCCESS;
     }
