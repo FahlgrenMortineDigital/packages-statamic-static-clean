@@ -16,7 +16,7 @@ class CleanStaticPageCache extends Command
      * @var string
      */
     protected $signature = 'static-cache:clean
-        {--dry-run : Show what would be deleted without actually deleting anything}
+        {--D|dry-run : Show what would be deleted without actually deleting anything}
         {--format= : Output format: text (default) or json}';
 
     /**
